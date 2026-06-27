@@ -1,0 +1,131 @@
+# A Pod is the smallest deployable unit in Kubernetes. 
+# It runs one or more containers that share network and storage. 
+# You will almost never create Pods directly in production — 
+# you use Deployments which manage Pods for you. But you must understand 
+# the Pod spec because everything else builds on it.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: myapp-pod
+  namespace: myapp-dev
+  labels:
+    app: myapp
+    version: v1
+    component: api
+spec:
+  # Containers that run in this Pod
+  containers:
+    - name: myapp
+      # Using a real FastAPI image for demonstration
+      # In your project this will be your built image
+      image: tiangolo/uvicorn-gunicorn-fastapi:python3.11-slim
+      
+      # The command to run (overrides the image's default CMD)
+      command: ["uvicorn"]
+      args: ["main:app", "--host", "0.0.0.0", "--port", "8000"]
+      
+      ports:
+        - name: http
+          containerPort: 8000
+          protocol: TCP
+      
+      # ── RESOURCE MANAGEMENT ──────────────────────────────────────────────
+      # requests: what the scheduler reserves on the node for this container
+      # limits: the hard ceiling — exceeding memory limit → OOMKilled
+      resources:
+        requests:
+          memory: "64Mi"
+          cpu: "50m"      # 50 millicores = 0.05 CPU cores
+        limits:
+          memory: "128Mi"
+          cpu: "200m"     # 200 millicores = 0.2 CPU cores
+      
+      # ── ENVIRONMENT VARIABLES ────────────────────────────────────────────
+      env:
+        # Direct value
+        - name: APP_NAME
+          value: "myapp"
+        
+        # Value from ConfigMap key
+        - name: APP_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: myapp-config
+              key: APP_ENV
+        
+        - name: APP_LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: myapp-config
+              key: APP_LOG_LEVEL
+        
+        # Value from Secret key
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: myapp-secret
+              key: DB_PASSWORD
+        
+        - name: API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: myapp-secret
+              key: API_KEY
+      
+      # ── VOLUME MOUNTS ────────────────────────────────────────────────────
+      volumeMounts:
+        # Mount the config file from ConfigMap as a file inside the container
+        - name: app-config
+          mountPath: /etc/myapp
+          readOnly: true
+      
+      # ── HEALTH PROBES ────────────────────────────────────────────────────
+      # readinessProbe: pod receives traffic ONLY when this passes
+      # If it fails, the pod is removed from Service endpoints (no traffic)
+      readinessProbe:
+        httpGet:
+          path: /health
+          port: 8000
+        initialDelaySeconds: 10   # wait 10s after start before first check
+        periodSeconds: 5          # check every 5s
+        failureThreshold: 3       # mark not ready after 3 failures
+        successThreshold: 1       # mark ready after 1 success
+      
+      # livenessProbe: if this fails, Kubernetes RESTARTS the container
+      # Use for detecting deadlocks — situations where the app is running but stuck
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8000
+        initialDelaySeconds: 15
+        periodSeconds: 10
+        failureThreshold: 3
+        successThreshold: 1
+      
+      # startupProbe: gives slow-starting containers time to come up
+      # Disables liveness and readiness until this passes
+      # Essential for apps that take >30s to start
+      startupProbe:
+        httpGet:
+          path: /health
+          port: 8000
+        failureThreshold: 30      # 30 * 2s = 60s max startup time
+        periodSeconds: 2
+  
+  # ── VOLUMES ──────────────────────────────────────────────────────────────
+  volumes:
+    # ConfigMap as a volume — mounts each key as a file
+    - name: app-config
+      configMap:
+        name: myapp-config
+        items:
+          - key: app.ini
+            path: app.ini
+  
+  # ── POD-LEVEL SETTINGS ───────────────────────────────────────────────────
+  # Don't automatically mount the default service account token
+  # Pods that don't talk to the Kubernetes API don't need this
+  automountServiceAccountToken: false
+  
+  # Restart policy: Always (default), OnFailure, Never
+  restartPolicy: Always

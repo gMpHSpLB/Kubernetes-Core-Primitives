@@ -1,0 +1,184 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myapp
+  namespace: myapp-dev
+  labels:
+    app: myapp
+    version: v1
+    component: api
+    managed-by: tutorial-t01
+  # Annotations are like labels but for non-identifying metadata
+  # Often used by tools like ArgoCD, Helm, and monitoring systems
+  annotations:
+    deployment.kubernetes.io/description: "myapp FastAPI service — dev environment"
+spec:
+  # How many pod replicas to maintain
+  replicas: 2
+  
+  # The Deployment uses this selector to find which pods it manages
+  # MUST match the labels in spec.template.metadata.labels
+  selector:
+    matchLabels:
+      app: myapp
+      component: api
+  
+  # Rolling update strategy — how to replace pods when updating
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # At most 1 extra pod above desired count during update
+      maxSurge: 1
+      # At most 0 pods below desired count during update
+      # With 2 replicas: always at least 2 pods running during update
+      maxUnavailable: 0
+  
+  # Pod template — this is what each pod looks like
+  template:
+    metadata:
+      labels:
+        # These MUST match selector.matchLabels above
+        app: myapp
+        component: api
+        # Additional labels for filtering and monitoring
+        version: v1
+        environment: dev
+      annotations:
+        # This annotation causes pods to restart when the ConfigMap changes
+        # ArgoCD and Helm use similar patterns
+        checksum/config: "abc123-update-this-when-config-changes"
+    
+    spec:
+      # ── SCHEDULING ────────────────────────────────────────────────────
+      # Don't schedule both replicas on the same node
+      # In production this is essential — node failure would kill both pods
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: myapp
+                topologyKey: kubernetes.io/hostname
+      
+      # ── SECURITY ──────────────────────────────────────────────────────
+      automountServiceAccountToken: false
+      
+      # Pod-level security context
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 2000
+      
+      # ── CONTAINERS ────────────────────────────────────────────────────
+      containers:
+        - name: myapp
+          image: nginx:1.25-alpine
+          
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "25m"
+            limits:
+              memory: "64Mi"
+              cpu: "100m"
+          
+          # Container-level security context
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          
+          env:
+            - name: APP_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: myapp-config
+                  key: APP_ENV
+            
+            - name: APP_LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: myapp-config
+                  key: APP_LOG_LEVEL
+            
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: myapp-secret
+                  key: DB_PASSWORD
+            
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          
+          volumeMounts:
+            - name: app-config
+              mountPath: /etc/myapp
+              readOnly: true
+            # nginx needs a writable /tmp — readOnlyRootFilesystem requires this
+            - name: tmp-dir
+              mountPath: /tmp
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: nginx-run
+              mountPath: /var/run
+          
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 3
+            successThreshold: 1
+          
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+            successThreshold: 1
+          
+          startupProbe:
+            httpGet:
+              path: /
+              port: 80
+            failureThreshold: 30
+            periodSeconds: 2
+      
+      volumes:
+        - name: app-config
+          configMap:
+            name: myapp-config
+        - name: tmp-dir
+          emptyDir: {}
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-run
+          emptyDir: {}
+      
+      # Give pods 30 seconds to finish in-flight requests before being killed
+      terminationGracePeriodSeconds: 30

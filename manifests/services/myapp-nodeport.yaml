@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: myapp-nodeport
+  namespace: myapp-dev
+  labels:
+    app: myapp
+    component: api
+spec:
+  # NodePort: accessible from outside the cluster via <NodeIP>:<NodePort>
+  # NodePort range: 30000-32767
+  type: NodePort
+  
+  selector:
+    app: myapp
+    component: api
+  
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      nodePort: 30080    # Fixed port on every node — omit to let Kubernetes choose
+      protocol: TCP

@@ -1,0 +1,30 @@
+#For non sesitive configuration data
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: myapp-config
+  namespace: myapp-dev
+  labels:
+    app: myapp
+    environment: dev
+data:
+  # Simple key-value pairs
+  APP_ENV: "dev"
+  APP_LOG_LEVEL: "info"
+  APP_PORT: "8000"
+  APP_WORKERS: "2"
+  
+  # Multi-line config file — can be mounted as a file inside the container
+  app.ini: |
+    [server]
+    host = 0.0.0.0
+    port = 8000
+    workers = 2
+    
+    [logging]
+    level = info
+    format = json
+    
+    [feature_flags]
+    enable_debug_endpoint = false
+    enable_metrics = true

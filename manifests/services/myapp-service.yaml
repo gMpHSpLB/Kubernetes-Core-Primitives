@@ -1,0 +1,33 @@
+# Service: Exposing Your Application
+# A Pod's IP address is ephemeral — it changes every time a pod restarts. 
+# A Service provides a stable IP and DNS name that load-balances traffic 
+# across matching pods.
+# Three Service types you need to know:
+# Type	                Access	                  Use Case
+# ClusterIP	          Inside cluster only	        Internal microservice communication
+# NodePort	          Via node IP + port	        Local development, direct external access
+# LoadBalancer	      Cloud load balancer	        Production external access (cloud only)
+apiVersion: v1
+kind: Service
+metadata:
+  name: myapp
+  namespace: myapp-dev
+  labels:
+    app: myapp
+    component: api
+spec:
+  # ClusterIP: only reachable from inside the cluster
+  # Other pods access this via: http://myapp.myapp-dev.svc.cluster.local
+  type: ClusterIP
+  
+  # The selector determines which pods receive traffic from this Service
+  # Any pod with these labels in this namespace gets traffic
+  selector:
+    app: myapp
+    component: api
+  
+  ports:
+    - name: http
+      port: 80         # Port exposed by the Service
+      targetPort: 80   # Port on the Pod to forward to
+      protocol: TCP

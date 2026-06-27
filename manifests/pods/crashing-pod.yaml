@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: crashing-pod
+  namespace: myapp-dev
+spec:
+  containers:
+    - name: crash
+      image: busybox:1.35
+      # This command exits immediately with code 1 (failure)
+      command: ["sh", "-c", "echo 'Starting app...' && sleep 2 && exit 1"]
+      resources:
+        requests:
+          memory: "16Mi"
+          cpu: "10m"
+        limits:
+          memory: "32Mi"
+          cpu: "50m"
+  restartPolicy: Always
