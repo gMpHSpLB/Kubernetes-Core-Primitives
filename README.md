@@ -21,6 +21,6 @@ Key skills demonstrated:
   - Systematic kubectl-based troubleshooting methodology
   - Rolling update mechanics and rollback procedure
 
-<img width="1440" height="1840" alt="image" src="https://github.com/user-attachments/assets/615297ff-7bb6-489f-abdc-d3bfd444c73f" />
+
 
 
